@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { createSupabaseBrowser } from '@/lib/supabaseClient';
+import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
 
 export default function LoginPage() {
   const supabase = createSupabaseBrowser();
