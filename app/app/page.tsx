@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
 import GeneratorPlaceholder from '@/components/GeneratorPlaceholder';
 import Link from 'next/link';
 
