@@ -1,52 +1,50 @@
+// app/app/page.tsx
 import { cookies } from 'next/headers';
-import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
-import GeneratorPlaceholder from '@/components/GeneratorPlaceholder';
 import Link from 'next/link';
+import GeneratorPlaceholder from '@/components/GeneratorPlaceholder';
+import { createServerClient } from '@supabase/ssr';
 
-export default async function AppPage() {
+export default async function Page() {
   const cookieStore = cookies();
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return (
-      <main className="min-h-screen grid place-items-center p-6">
-        <div className="max-w-md text-center">
-          <p>Faça login para acessar.</p>
-          <Link href="/login" className="underline">Ir para login</Link>
-        </div>
-      </main>
-    );
-  }
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch {}
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set({ name, value: '', ...options, expires: new Date(0) });
+          } catch {}
+        },
+      },
+    }
+  );
 
-  const { data: license } = await supabase
-    .from('licenses')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .maybeSingle();
-
-  const allowed = !!license && (license.plan === 'mensal' || (license.plan === 'creditos' && (license.credits ?? 0) > 0));
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   return (
-    <main className="min-h-screen p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Aplicativo</h1>
-          <div className="text-sm text-zinc-600">
-            {allowed ? 'Licença ativa' : 'Sem licença ativa'}
-          </div>
-        </header>
-
-        {allowed ? (
-          <GeneratorPlaceholder />
-        ) : (
-          <div className="border rounded-2xl p-6 bg-white">
-            <h2 className="text-xl font-semibold">Você ainda não tem acesso.</h2>
-            <p className="text-zinc-600 mt-2">Finalize a compra na Cakto e aguarde alguns segundos para a ativação automática.</p>
-          </div>
-        )}
-      </div>
-    </main>
+    <div className="p-6">
+      {session ? (
+        <GeneratorPlaceholder />
+      ) : (
+        <div className="space-y-4">
+          <p>Você precisa entrar para usar o gerador.</p>
+          <Link href="/login" className="underline">
+            Ir para Login
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
