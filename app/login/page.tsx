@@ -3,16 +3,13 @@
 import { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
   async function handleLogin(e: React.FormEvent) {
@@ -30,7 +27,7 @@ export default function LoginPage() {
         <input
           type="email"
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="seu@email.com"
           className="w-full border rounded px-3 py-2"
           required
