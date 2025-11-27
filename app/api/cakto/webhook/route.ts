@@ -1,22 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseService } from '@/lib/supabaseServer';
+import { createSupabaseService } from '@/lib/supabaseClient';
+import type { GoTrueAdminApi, User } from '@supabase/supabase-js';
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-
-    // TODO: Validar assinatura/segredo do webhook com WEBHOOK_SECRET se Cakto suportar.
-    if (body?.event !== 'order.approved') {
-      return NextResponse.json({ ok: true });
-    }
-
-    const supabase = createSupabaseService();
-    const email = (body?.buyer?.email || '').toLowerCase();
-    if (!email) return NextResponse.json({ ok: false, error: 'email ausente' }, { status: 400 });
-
-    import type { GoTrueAdminApi, User } from '@supabase/supabase-js';
-
-// Busca paginada por usuário via e-mail (v2 não tem getUserByEmail)
+// Função para buscar usuário pelo e-mail usando listUsers (Supabase v2)
 async function findUserByEmail(admin: GoTrueAdminApi, email: string): Promise<User | null> {
   let page = 1;
   const perPage = 200;
@@ -25,23 +11,59 @@ async function findUserByEmail(admin: GoTrueAdminApi, email: string): Promise<Us
     const { data, error } = await admin.listUsers({ page, perPage });
     if (error) throw error;
 
-    const found = data.users.find(u => (u.email || '').toLowerCase() === email.toLowerCase());
+    const found = data.users.find(
+      u => (u.email || '').toLowerCase() === email.toLowerCase()
+    );
     if (found) return found;
 
-    // se voltou menos que perPage, acabou a paginação
     if (data.users.length < perPage) return null;
     page++;
   }
 }
 
-// … dentro do handler:
-let user = await findUserByEmail(supabase.auth.admin, email);
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
 
-if (!user) {
-  const { data: created, error: createErr } = await supabase.auth.admin.createUser({
-    email,
-    email_confirm: true,
-  });
-  if (createErr) throw createErr;
-  user = created.user;
+    // Checar se o webhook é do tipo esperado
+    if (body?.event !== 'order.approved') {
+      return NextResponse.json({ ok: true });
+    }
+
+    const supabase = createSupabaseService();
+
+    const email = body?.buyer?.email || '';
+    if (!email) {
+      return NextResponse.json({ error: 'Email não encontrado' }, { status: 400 });
+    }
+
+    // Buscar usuário
+    let user = await findUserByEmail(supabase.auth.admin, email);
+
+    // Criar usuário se não existir
+    if (!user) {
+      const { data: created, error } = await supabase.auth.admin.createUser({
+        email,
+        email_confirm: true,
+      });
+
+      if (error) {
+        console.error('Erro ao criar usuário:', error);
+        return NextResponse.json({ error: 'Erro ao criar usuário' }, { status: 500 });
+      }
+
+      user = created.user!;
+    }
+
+    // Aqui você adiciona lógica pós-compra (ex: liberar assinatura, créditos etc.)
+
+    return NextResponse.json({ ok: true, userId: user.id });
+
+  } catch (err: any) {
+    console.error('Webhook error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error', details: err?.message },
+      { status: 500 }
+    );
+  }
 }
