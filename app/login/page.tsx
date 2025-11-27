@@ -1,52 +1,48 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 import { useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    // escolha o método de login que você quer (ex.: magic link por e-mail)
     const { error } = await supabase.auth.signInWithOtp({ email });
     setLoading(false);
-    if (error) {
-      alert(error.message);
-    } else {
-      alert('Enviamos um link de login para seu e-mail.');
-    }
+    alert(error ? error.message : 'Enviamos um link de login para seu e-mail.');
   }
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Entrar</h1>
+    <main className="min-h-screen p-6 max-w-md mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Entrar</h1>
       <form onSubmit={handleLogin} className="space-y-3">
         <input
           type="email"
-          required
-          placeholder="seu@email.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border p-2 rounded"
+          onChange={e => setEmail(e.target.value)}
+          placeholder="seu@email.com"
+          className="w-full border rounded px-3 py-2"
+          required
         />
         <button
           type="submit"
           disabled={loading}
-          className="w-full border p-2 rounded"
+          className="w-full bg-black text-white rounded px-3 py-2"
         >
           {loading ? 'Enviando...' : 'Entrar com link mágico'}
         </button>
       </form>
-    </div>
+    </main>
   );
 }
