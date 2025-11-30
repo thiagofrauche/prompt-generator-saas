@@ -70,11 +70,14 @@ export default function LoginPage() {
   }
 
   const handleCreateAdmin = async () => {
+    console.log("[v0] Iniciando criação de admin...")
     const supabase = createClient()
     setIsCreatingAdmin(true)
     setError(null)
 
     try {
+      console.log("[v0] Tentando criar usuário no Supabase Auth...")
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: "amoraaipromptmaker@gmail.com",
         password: "thiago142208.at",
@@ -83,9 +86,20 @@ export default function LoginPage() {
         },
       })
 
-      if (signUpError) throw signUpError
+      console.log("[v0] Resposta do signUp:", { signUpData, signUpError })
+
+      if (signUpError) {
+        console.error("[v0] Erro no signUp:", signUpError)
+        throw signUpError
+      }
 
       if (signUpData.user) {
+        console.log("[v0] Usuário criado, ID:", signUpData.user.id)
+        console.log("[v0] Aguardando 2 segundos para garantir que o perfil foi criado pelo trigger...")
+
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+
+        console.log("[v0] Atualizando perfil para admin...")
         const { error: updateError } = await supabase
           .from("profiles")
           .update({
@@ -95,23 +109,35 @@ export default function LoginPage() {
           })
           .eq("id", signUpData.user.id)
 
-        if (updateError) throw updateError
+        console.log("[v0] Resultado da atualização:", updateError)
+
+        if (updateError) {
+          console.error("[v0] Erro ao atualizar perfil:", updateError)
+          throw updateError
+        }
+
+        console.log("[v0] Admin criado com sucesso!")
       }
 
       alert(
-        "Conta de administrador criada com sucesso!\n\nEmail: amoraaipromptmaker@gmail.com\nSenha: thiago142208.at\n\nVerifique seu email para confirmar a conta.",
+        "✅ Conta de administrador criada com sucesso!\n\nEmail: amoraaipromptmaker@gmail.com\nSenha: thiago142208.at\n\n⚠️ IMPORTANTE: Verifique seu email e clique no link de confirmação antes de fazer login!",
       )
 
       setEmail("amoraaipromptmaker@gmail.com")
       setPassword("thiago142208.at")
     } catch (error: unknown) {
+      console.error("[v0] Erro capturado:", error)
       if (error instanceof Error) {
-        if (error.message.includes("already registered")) {
-          alert("Esta conta de administrador já existe! Use o formulário de login acima.")
+        if (error.message.includes("already registered") || error.message.includes("User already registered")) {
+          console.log("[v0] Usuário já existe")
+          alert(
+            "ℹ️ Esta conta de administrador já existe!\n\nUse o formulário de login acima com:\nEmail: amoraaipromptmaker@gmail.com\nSenha: thiago142208.at",
+          )
           setEmail("amoraaipromptmaker@gmail.com")
           setPassword("thiago142208.at")
         } else {
-          setError(error.message)
+          console.error("[v0] Erro inesperado:", error.message)
+          setError(`Erro ao criar admin: ${error.message}`)
         }
       }
     } finally {
