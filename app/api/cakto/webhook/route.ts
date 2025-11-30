@@ -1,69 +1,90 @@
-import { NextResponse } from 'next/server';
-import { createSupabaseService } from '@/lib/supabaseClient';
-import type { GoTrueAdminApi, User } from '@supabase/supabase-js';
+import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import type { CaktoWebhookEvent } from "@/lib/cakto/types"
 
-// Função para buscar usuário pelo e-mail usando listUsers (Supabase v2)
-async function findUserByEmail(admin: GoTrueAdminApi, email: string): Promise<User | null> {
-  let page = 1;
-  const perPage = 200;
-
-  while (true) {
-    const { data, error } = await admin.listUsers({ page, perPage });
-    if (error) throw error;
-
-    const found = data.users.find(
-      u => (u.email || '').toLowerCase() === email.toLowerCase()
-    );
-    if (found) return found;
-
-    if (data.users.length < perPage) return null;
-    page++;
-  }
-}
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
+    const supabase = await createClient()
+    const webhookData: CaktoWebhookEvent = await request.json()
 
-    // Checar se o webhook é do tipo esperado
-    if (body?.event !== 'order.approved') {
-      return NextResponse.json({ ok: true });
+    console.log("[v0] Cakto webhook received:", JSON.stringify(webhookData, null, 2))
+
+    const webhookSecret = process.env.CAKTO_WEBHOOK_SECRET
+    if (webhookSecret) {
+      const authHeader = request.headers.get("authorization")
+      if (authHeader !== `Bearer ${webhookSecret}`) {
+        console.error("[v0] Webhook authentication failed")
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
     }
 
-    const supabase = createSupabaseService();
+    const { event, order } = webhookData
 
-    const email = body?.buyer?.email || '';
-    if (!email) {
-      return NextResponse.json({ error: 'Email não encontrado' }, { status: 400 });
-    }
+    if (event === "purchase_approved" && order.status === "paid") {
+      const customerEmail = order.customer.email
 
-    // Buscar usuário
-    let user = await findUserByEmail(supabase.auth.admin, email);
+      console.log("[v0] Processing payment approval for:", customerEmail)
 
-    // Criar usuário se não existir
-    if (!user) {
-      const { data: created, error } = await supabase.auth.admin.createUser({
-        email,
-        email_confirm: true,
-      });
+      const { data: user } = await supabase.auth.admin.listUsers()
+      const targetUser = user?.users.find((u) => u.email === customerEmail)
 
-      if (error) {
-        console.error('Erro ao criar usuário:', error);
-        return NextResponse.json({ error: 'Erro ao criar usuário' }, { status: 500 });
+      if (!targetUser) {
+        console.error("[v0] User not found for email:", customerEmail)
+        return NextResponse.json({ error: "User not found" }, { status: 404 })
       }
 
-      user = created.user!;
+      const expirationDate = new Date()
+      expirationDate.setMonth(expirationDate.getMonth() + 1) // 30 days
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          payment_status: "paid",
+          payment_expires_at: expirationDate.toISOString(),
+          cakto_order_id: order.id,
+          cakto_ref_id: order.refId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", targetUser.id)
+
+      if (updateError) {
+        console.error("[v0] Failed to update profile:", updateError)
+        return NextResponse.json({ error: "Failed to update profile" }, { status: 500 })
+      }
+
+      console.log("[v0] Payment status updated successfully for user:", targetUser.id)
+
+      return NextResponse.json({
+        success: true,
+        message: "Payment processed successfully",
+        userId: targetUser.id,
+      })
     }
 
-    // Aqui você adiciona lógica pós-compra (ex: liberar assinatura, créditos etc.)
+    if (event === "subscription_canceled" || event === "order_refunded") {
+      const customerEmail = order.customer.email
 
-    return NextResponse.json({ ok: true, userId: user.id });
+      console.log("[v0] Processing cancellation/refund for:", customerEmail)
 
-  } catch (err: any) {
-    console.error('Webhook error:', err);
-    return NextResponse.json(
-      { error: 'Internal server error', details: err?.message },
-      { status: 500 }
-    );
+      const { data: user } = await supabase.auth.admin.listUsers()
+      const targetUser = user?.users.find((u) => u.email === customerEmail)
+
+      if (targetUser) {
+        await supabase
+          .from("profiles")
+          .update({
+            payment_status: "expired",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", targetUser.id)
+
+        console.log("[v0] Payment status set to expired for user:", targetUser.id)
+      }
+    }
+
+    return NextResponse.json({ success: true, event })
+  } catch (error) {
+    console.error("[v0] Webhook processing error:", error)
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 })
   }
 }

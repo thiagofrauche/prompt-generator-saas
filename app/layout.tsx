@@ -1,10 +1,34 @@
-import './globals.css';
-import React from 'react';
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
+import "./globals.css"
+import { AnimatedBackground } from "@/components/animated-background"
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "AMORA AI – Prompt Maker",
+  description: "Generate high-quality, technical AI prompts based on your desires",
+  generator: "v0.app",
+  icons: {
+    icon: "/amora-icon.png",
+    apple: "/amora-icon.png",
+  },
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
-    <html lang="pt-br">
-      <body className="bg-zinc-50 text-zinc-900">{children}</body>
+    <html lang="pt-BR">
+      <body className={`font-sans antialiased`}>
+        <AnimatedBackground />
+        {children}
+        <Analytics />
+      </body>
     </html>
-  );
+  )
 }
